@@ -121,12 +121,3 @@ Si tienes conocimientos técnicos y quieres colaborar, puedes abrir un _issue_ o
 Desarrollado por **Francisco Matías Molina Jurado**.
 
 ---
-
-## 📬 Contacto
-
-¿Tienes dudas, sugerencias o quieres colaborar?  
-Puedes dejar tus comentarios o contactarte directamente para ayudar a mejorar LaborLink.
-
----
-
-**LaborLink: facilitando el acceso al empleo y la gestión de talento, para todos.**

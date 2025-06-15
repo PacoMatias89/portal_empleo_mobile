@@ -110,12 +110,6 @@ src/
 
 ---
 
-## 🤝 Contribuciones
-
-Si tienes conocimientos técnicos y quieres colaborar, puedes abrir un _issue_ o enviar un _pull request_. Toda ayuda es bienvenida, ya sea para mejorar la interfaz, optimizar el código o agregar nuevas funcionalidades.
-
----
-
 ## 👨‍💻 Autor
 
 Desarrollado por **Francisco Matías Molina Jurado**.

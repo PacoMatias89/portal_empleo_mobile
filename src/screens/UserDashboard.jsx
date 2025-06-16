@@ -39,6 +39,7 @@ const UserDashboard = () => {
         `${BASE_URL}/api/company/job-offers/getAllJobOffer`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
       setJobs(data);
       setFilteredJobs(data);
     } catch (err) {
@@ -208,6 +209,7 @@ const UserDashboard = () => {
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#007BFF' }}>{job.title}</Text>
                 <Text style={{ color: '#777' }}>{job.description.substring(0, 100)}...</Text>
+                <Text style={{color: '#777'}}> 🏢 Empresa : <Text style={{ fontWeight: 'bold' }}>{job.nameCompany}</Text></Text>
                 <Text style={{ color: '#555' }}>💰 Salario: <Text style={{ fontWeight: 'bold' }}>{job.salary}</Text></Text>
                 <Text style={{ color: '#555' }}>📍 Ubicación: <Text style={{ fontWeight: 'bold' }}>{job.location}</Text></Text>
               </View>

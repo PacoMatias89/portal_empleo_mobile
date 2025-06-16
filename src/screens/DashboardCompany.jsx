@@ -5,33 +5,63 @@ import {
   ScrollView,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { BarChart } from "react-native-chart-kit";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
 
 const screenWidth = Dimensions.get("window").width;
 const BASE_URL = "https://franciscomolina.me:8082";
 
+// Función para decodificar JWT sin librerías externas
+function parseJwt(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
 const CompanyDashboard = () => {
   const [stats, setStats] = useState({
-    jobOffers: 0,
+    jobOffersCount: 0,
     totalViews: 0,
     applications: 0,
-    jobOffersCount: 0,
   });
   const [chartData, setChartData] = useState([]);
-  const navigation = useNavigation();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const token = await AsyncStorage.getItem("token");
-        const role = await AsyncStorage.getItem("userRole");
+    const fetchStats = async () => {
+      setLoading(true);
+      setError("");
 
-        if (role !== "COMPANY" || !token) {
-          // No es empresa o no hay token, no hacer fetch ni mostrar error
-          return;
+      try {
+        const token = (await AsyncStorage.getItem("token"))?.trim();
+        if (!token) throw new Error("Token no encontrado");
+
+        // Obtener rol guardado o del token JWT
+        let role = (await AsyncStorage.getItem("userRole"))?.trim();
+        if (!role) {
+          const decoded = parseJwt(token);
+          role = decoded?.roles || decoded?.role || "";
+          console.log("DEBUG - role from token:", role);
+        } else {
+          console.log("DEBUG - role from AsyncStorage:", role);
+        }
+
+        role = role.toUpperCase();
+        if (role !== "ROLE_COMPANY" && role !== "COMPANY") {
+          throw new Error("Usuario no autorizado");
         }
 
         const headers = {
@@ -39,13 +69,17 @@ const CompanyDashboard = () => {
           "Content-Type": "application/json",
         };
 
-        const [jobOffersRes, viewsRes, applicationsRes, jobOffersCountRes] =
-          await Promise.all([
-            fetch(`${BASE_URL}/api/company/jobOffers`, { headers }),
-            fetch(`${BASE_URL}/api/company/totalViews`, { headers }),
-            fetch(`${BASE_URL}/api/company/applications`, { headers }),
-            fetch(`${BASE_URL}/api/company/jobOffersCount`, { headers }),
-          ]);
+        const [
+          jobOffersRes,
+          viewsRes,
+          applicationsRes,
+          jobOffersCountRes,
+        ] = await Promise.all([
+          fetch(`${BASE_URL}/api/company/jobOffers`, { headers }),
+          fetch(`${BASE_URL}/api/company/totalViews`, { headers }),
+          fetch(`${BASE_URL}/api/company/applications`, { headers }),
+          fetch(`${BASE_URL}/api/company/jobOffersCount`, { headers }),
+        ]);
 
         if (
           !jobOffersRes.ok ||
@@ -53,8 +87,7 @@ const CompanyDashboard = () => {
           !applicationsRes.ok ||
           !jobOffersCountRes.ok
         ) {
-          // Alguna respuesta no fue OK, no actualizamos datos ni mostramos error
-          return;
+          throw new Error("Error al obtener los datos del servidor");
         }
 
         const jobOffersArray = await jobOffersRes.json();
@@ -62,10 +95,11 @@ const CompanyDashboard = () => {
         const applicationsText = await applicationsRes.text();
         const jobOffersCountText = await jobOffersCountRes.text();
 
+        // Preparar datos para gráfico
         const offersByMonth = {};
-        jobOffersArray.forEach((offer) => {
-          if (offer.createdAt) {
-            const date = new Date(offer.createdAt);
+        jobOffersArray.forEach(({ createdAt }) => {
+          if (createdAt) {
+            const date = new Date(createdAt);
             const month = date.toLocaleString("default", { month: "short" });
             const year = date.getFullYear();
             const key = `${month} ${year}`;
@@ -74,26 +108,26 @@ const CompanyDashboard = () => {
         });
 
         const chartDataArray = Object.entries(offersByMonth).map(
-          ([month, count]) => ({
-            month,
-            count,
-          })
+          ([month, count]) => ({ month, count })
         );
 
         setChartData(chartDataArray);
 
         setStats({
-          jobOffers: jobOffersArray.length,
+          jobOffersCount: parseInt(jobOffersCountText, 10) || 0,
           totalViews: parseInt(totalViewsText, 10) || 0,
           applications: parseInt(applicationsText, 10) || 0,
-          jobOffersCount: parseInt(jobOffersCountText, 10) || 0,
         });
-      } catch {
-        // Error capturado, no hacer nada para evitar error en consola
+
+      } catch (err) {
+        console.error(err);
+        setError(err.message || "Error cargando estadísticas");
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchData();
+    fetchStats();
   }, []);
 
   const barData = {
@@ -108,61 +142,70 @@ const CompanyDashboard = () => {
         Gestiona y publica tus ofertas de empleo de manera eficiente.
       </Text>
 
-      <View style={styles.cardsContainer}>
-        {[
-          {
-            label: "Ofertas publicadas",
-            value: stats.jobOffersCount,
-            icon: "📌",
-            bg: "#D1FAE5",
-          },
-          {
-            label: "Visitas totales",
-            value: stats.totalViews,
-            icon: "👀",
-            bg: "#DBEAFE",
-          },
-          {
-            label: "Postulaciones",
-            value: stats.applications,
-            icon: "📥",
-            bg: "#FEF3C7",
-          },
-        ].map(({ label, value, icon, bg }) => (
-          <View key={label} style={[styles.card, { backgroundColor: bg }]}>
-            <Text style={styles.cardTitle}>
-              {icon} {label}
-            </Text>
-            <Text style={styles.cardValue}>{value}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Text style={styles.chartTitle}>Ofertas por Mes</Text>
-
-      {chartData.length > 0 ? (
-        <BarChart
-          data={barData}
-          width={screenWidth - 40}
-          height={300}
-          fromZero
-          chartConfig={{
-            backgroundGradientFrom: "#ffffff",
-            backgroundGradientTo: "#ffffff",
-            decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(34,197,94, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(55,65,81, ${opacity})`,
-            style: {
-              borderRadius: 16,
-            },
-          }}
-          style={{
-            marginVertical: 8,
-            borderRadius: 16,
-          }}
-        />
+      {loading ? (
+        <ActivityIndicator size="large" color="#34D399" />
+      ) : error ? (
+        <Text style={styles.errorText}>{error}</Text>
       ) : (
-        <Text style={styles.noDataText}>No hay datos disponibles</Text>
+        <>
+          <View style={styles.cardsContainer}>
+            {[
+              {
+                label: "Ofertas publicadas",
+                value: stats.jobOffersCount,
+                icon: "📌",
+                bg: "#D1FAE5",
+              },
+              {
+                label: "Visitas totales",
+                value: stats.totalViews,
+                icon: "👀",
+                bg: "#DBEAFE",
+              },
+              {
+                label: "Postulaciones",
+                value: stats.applications,
+                icon: "📥",
+                bg: "#FEF3C7",
+              },
+            ].map(({ label, value, icon, bg }) => (
+              <View key={label} style={[styles.card, { backgroundColor: bg }]}>
+                <Text style={styles.cardTitle}>
+                  {icon} {label}
+                </Text>
+                <Text style={styles.cardValue}>{value}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.chartTitle}>Ofertas por Mes</Text>
+
+          {chartData.length > 0 ? (
+            <BarChart
+              data={barData}
+              width={screenWidth - 40}
+              height={300}
+              fromZero
+              chartConfig={{
+                backgroundGradientFrom: "#ffffff",
+                backgroundGradientTo: "#ffffff",
+                decimalPlaces: 0,
+                color: () => `rgb(34, 34, 28)`, // barra totalmente opaca
+                labelColor: () => `rgb(34, 34, 28)`,
+                style: {
+                  borderRadius: 16,
+                },
+              }}
+              style={{
+                marginVertical: 8,
+                borderRadius: 16,
+              }}
+            />
+
+          ) : (
+            <Text style={styles.noDataText}>No hay datos disponibles</Text>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -226,5 +269,11 @@ const styles = StyleSheet.create({
   noDataText: {
     textAlign: "center",
     color: "#6B7280",
+  },
+  errorText: {
+    color: "red",
+    textAlign: "center",
+    fontWeight: "600",
+    marginVertical: 10,
   },
 });
